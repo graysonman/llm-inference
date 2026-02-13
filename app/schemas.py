@@ -15,3 +15,11 @@ class ChatResponse(BaseModel):
     completion_tokens: int
     model: str
     request_id: str
+
+    context_window: int
+    context_used_pct: float
+    model_type: str                 # "decoder-only" | "encoder-decoder" | "unknown"
+    attention_masking: str          # "causal" | "none" | "unknown"
+    attention_heads: int | None = None
+    hidden_size: int | None = None
+    estimated_attention_ops: int | None = None  
