@@ -433,75 +433,63 @@ def chat(payload: ChatRequest):
 @app.post("/evaluate", response_model=EvaluateResponse)
 def evaluate(payload: EvaluateRequest):
     rid = REQUEST_ID.get()
+
     prompt = payload.prompt.strip()
     answer = payload.response.strip()
+
     if not prompt or not answer:
         raise HTTPException(status_code=400, detail="prompt and response must be non-empty")
 
     start = time.perf_counter()
 
     eval_prompt = _build_eval_prompt(prompt, answer, [c for c in payload.criteria])
+
     eval_text, _, _ = _generate(
         prompt=eval_prompt,
         max_new_tokens=256,
-        temperature=0.0,  # deterministic
+        temperature=0.0,
         top_p=1.0,
     )
 
     latency_ms = int((time.perf_counter() - start) * 1000)
 
-    json_block = _extract_json_block(eval_text)
+    import re
+
+    pattern = re.compile(
+        r"criterion\s*:\s*(.+?)\s*\n"
+        r"score\s*:\s*(\d+)\s*\n"
+        r"rationale\s*:\s*(.+?)(?=\ncriterion:|\Z)",
+        re.IGNORECASE | re.DOTALL
+    )
+
+    matches = pattern.findall(eval_text)
+
     scores: List[CriterionScore] = []
 
-    if json_block is None:
-        # Fallback: return a single overall score with rationale text
+    for match in matches:
+        try:
+            criterion = match[0].strip()
+            score = int(match[1].strip())
+            rationale = match[2].strip()
+
+            scores.append(
+                CriterionScore(
+                    criterion=criterion,
+                    score=score,
+                    rationale=rationale
+                )
+            )
+        except Exception:
+            continue
+
+    if not scores:
         scores = [
             CriterionScore(
                 criterion="overall",
                 score=5,
-                rationale=f"Failed to parse evaluator JSON. Raw output: {eval_text[:500]}",
+                rationale=f"Failed to parse evaluator output. Raw output: {eval_text[:500]}"
             )
         ]
-    else:
-        import json
-
-        try:
-            scores = []
-            blocks = eval_text.split("---")
-
-            for block in blocks:
-                lines = block.strip().split("\n")
-                if len(lines) >= 3:
-                    try:
-                        criterion = lines[0].split(":", 1)[1].strip()
-                        score = int(lines[1].split(":", 1)[1].strip())
-                        rationale = lines[2].split(":", 1)[1].strip()
-                        scores.append(
-                            CriterionScore(
-                                criterion=criterion,
-                                score=score,
-                                rationale=rationale,
-                            )
-                        )
-                    except Exception:
-                        continue
-
-            if not scores:
-                scores = [
-                    CriterionScore(
-                        criterion="overall",
-                        score=5,
-                        rationale="Evaluator output could not be parsed."
-                    )
-                ]
-        except Exception:
-            scores = [
-                CriterionScore(
-                    criterion="overall",
-                    score=5,
-                    rationale=f"Evaluator JSON parse error. Raw output: {eval_text[:500]}",
-                )
-            ]
 
     log_json(
         LOGGER,
