@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LLM Experimentation Console</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>LLM Experimentation Console</h1>
+
+    <section>
+        <h2>Chat</h2>
+
+        <textarea id="prompt" placeholder="Enter prompt..."></textarea>
+
+        <div class="row">
+            <label>Mode:</label>
+            <select id="mode">
+                <option value="single">Single</option>
+                <option value="refine">Refine</option>
+            </select>
+
+            <label>Refine Steps:</label>
+            <input type="number" id="refine_steps" value="1" min="1" max="3">
+        </div>
+
+        <div class="row">
+            <label>Max Tokens:</label>
+            <input type="number" id="max_tokens" value="160">
+
+            <label>Temperature:</label>
+            <input type="number" id="temperature" value="0.2" step="0.1">
+        </div>
+
+        <button onclick="runChat()">Run Chat</button>
+
+        <pre id="chat_output"></pre>
+    </section>
+
+    <section>
+        <h2>Evaluate</h2>
+
+        <textarea id="eval_prompt" placeholder="Original prompt..."></textarea>
+        <textarea id="eval_response" placeholder="Model response..."></textarea>
+
+        <button onclick="runEval()">Run Evaluation</button>
+
+        <pre id="eval_output"></pre>
+    </section>
+
+    <section>
+        <h2>Model Info</h2>
+        <button onclick="loadModel()">Load Model Info</button>
+        <pre id="model_output"></pre>
+    </section>
+
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

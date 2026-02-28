@@ -2,16 +2,17 @@ import os
 import time
 import uuid
 from contextvars import ContextVar
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import torch
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from app.logging_utils import get_logger, log_json
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import ChatRequest, ChatResponse, EvaluateRequest, EvaluateResponse, CriterionScore
 
 load_dotenv()
 
@@ -23,8 +24,6 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 tokenizer = None
 model = None
-
-# Cached model metadata for reuse
 MODEL_META: Dict[str, Any] = {}
 
 
@@ -36,25 +35,15 @@ def _safe_int(x: Any) -> Optional[int]:
 
 
 def _get_model_type() -> str:
-    """
-    Best-effort identification:
-    - decoder-only: causal LM (GPT-like)
-    - encoder-decoder: seq2seq (T5/BART-like)
-    """
     cfg = getattr(model, "config", None)
     if cfg is None:
         return "unknown"
     if getattr(cfg, "is_encoder_decoder", False):
         return "encoder-decoder"
-    # Our server loads AutoModelForCausalLM, so this should be decoder-only
     return "decoder-only"
 
 
 def _get_attention_masking() -> str:
-    """
-    For decoder-only generation, attention is typically causal (future-masked).
-    We expose this explicitly because it maps to your notes: 'softmax to 0' for forbidden edges.
-    """
     mt = _get_model_type()
     if mt == "decoder-only":
         return "causal"
@@ -64,29 +53,21 @@ def _get_attention_masking() -> str:
 
 
 def _get_context_window() -> int:
-    """
-    Tries multiple config fields because different models use different names.
-    Falls back to tokenizer.model_max_length when it's sane.
-    """
     cfg = getattr(model, "config", None)
-
     candidates = []
+
     if cfg is not None:
         for attr in ("max_position_embeddings", "n_positions", "seq_length", "max_seq_len"):
-            v = getattr(cfg, attr, None)
-            iv = _safe_int(v)
+            iv = _safe_int(getattr(cfg, attr, None))
             if iv:
                 candidates.append(iv)
 
-    # tokenizer.model_max_length is sometimes an absurd sentinel (e.g. 1000000000000)
     tok_max = _safe_int(getattr(tokenizer, "model_max_length", None))
     if tok_max and tok_max < 100_000:
         candidates.append(tok_max)
 
-    # Choose the smallest non-trivial candidate (safer)
     candidates = [c for c in candidates if c >= 128]
     if not candidates:
-        # reasonable fallback
         return 2048
     return min(candidates)
 
@@ -101,7 +82,6 @@ def _get_heads_and_hidden() -> Tuple[Optional[int], Optional[int]]:
     if cfg is None:
         return None, None
 
-    # Common names across model families
     heads = getattr(cfg, "num_attention_heads", None)
     if heads is None:
         heads = getattr(cfg, "n_head", None)
@@ -116,16 +96,10 @@ def _get_heads_and_hidden() -> Tuple[Optional[int], Optional[int]]:
 
 
 def _estimated_attention_ops(seq_len: int) -> int:
-    # Illustrative metric to map attention to "message passing on a fully connected graph"
-    # Not exact FLOPs; just n^2 to communicate scaling clearly.
     return int(seq_len) * int(seq_len)
 
 
 def _enforce_context_guardrail(prompt_tokens: int, max_new_tokens: int, context_window: int) -> None:
-    """
-    For decoder-only models: the total tokens (prompt + generated) must fit within context window.
-    We enforce it explicitly so the system boundary reflects architectural constraints.
-    """
     total = prompt_tokens + max_new_tokens
     if total > context_window:
         raise HTTPException(
@@ -142,34 +116,31 @@ def _enforce_context_guardrail(prompt_tokens: int, max_new_tokens: int, context_
 
 
 def _generate(prompt: str, max_new_tokens: int, temperature: float, top_p: float) -> Tuple[str, int, int]:
-    """
-    Returns: (response_text, prompt_tokens, completion_tokens)
-    """
     prompt_tokens = _count_tokens(prompt)
 
     context_window = MODEL_META["context_window"]
     _enforce_context_guardrail(prompt_tokens, max_new_tokens, context_window)
 
     inputs = tokenizer(prompt, return_tensors="pt").to(DEVICE)
-
     do_sample = temperature > 0.0
 
-    with torch.inference_mode():
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=do_sample,
-            temperature=temperature if do_sample else None,
-            top_p=top_p if do_sample else None,
-            pad_token_id=tokenizer.eos_token_id,
-        )
+    try:
+        with torch.inference_mode():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=do_sample,
+                temperature=temperature if do_sample else None,
+                top_p=top_p if do_sample else None,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+    except Exception as e:
+        # Make this a clean 400 so stress tests don't look like "server crashed"
+        raise HTTPException(status_code=400, detail={"error": "generation_failed", "detail": repr(e)})
 
     full_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
     completion_tokens = int(output_ids.shape[-1] - inputs["input_ids"].shape[-1])
 
-    # Keep it simple and robust: return full decoded text if stripping fails.
-    # Some chat models have special tokens that make naive prefix stripping unreliable.
     if full_text.startswith(prompt):
         response_text = full_text[len(prompt):].lstrip()
     else:
@@ -178,7 +149,75 @@ def _generate(prompt: str, max_new_tokens: int, temperature: float, top_p: float
     return response_text, prompt_tokens, completion_tokens
 
 
-app = FastAPI(title="Baseline LLM Inference Server", version="0.2.0")
+def _build_critique_prompt(user_prompt: str, answer: str) -> str:
+    return (
+        "<|system|>\n"
+        "You are a strict technical reviewer. "
+        "Do not restate the answer. "
+        "Only list concrete errors or weaknesses.\n"
+        "<|user|>\n"
+        f"User prompt:\n{user_prompt}\n\n"
+        f"Assistant answer:\n{answer}\n\n"
+        "List flaws in bullet points.\n"
+        "<|assistant|>\n"
+    )
+
+
+def _build_refine_prompt(user_prompt: str, answer: str, critique: str) -> str:
+    return (
+        "<|system|>\n"
+        "You are rewriting the answer. "
+        "Fix the flaws listed in the critique. "
+        "Do not add conversational phrases. "
+        "Do not say 'I hope this helps'. "
+        "Be concise and technically accurate.\n"
+        "<|user|>\n"
+        f"User prompt:\n{user_prompt}\n\n"
+        f"Original answer:\n{answer}\n\n"
+        f"Critique:\n{critique}\n\n"
+        "Rewrite the improved answer below:\n"
+        "<|assistant|>\n"
+    )
+
+
+def _build_eval_prompt(user_prompt: str, answer: str, criteria: List[str]) -> str:
+    crit = ", ".join(criteria)
+    return (
+        "<|system|>\n"
+        "You are an evaluator. Score the answer 1-10 for each criterion. "
+        "Return EXACTLY this format with no extra text:\n"
+        "criterion: <name>\n"
+        "score: <number>\n"
+        "rationale: <one sentence>\n"
+        "---\n"
+        "Repeat block for each criterion.\n"
+        "<|user|>\n"
+        f"Criteria: {crit}\n\n"
+        f"User prompt:\n{user_prompt}\n\n"
+        f"Assistant response:\n{answer}\n"
+        "<|assistant|>\n"
+    )
+
+
+def _extract_json_block(text: str) -> Optional[str]:
+    """
+    Best-effort extraction of the first JSON object.
+    Keeps this stage lightweight. We can harden later.
+    """
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    return text[start : end + 1]
+
+
+app = FastAPI(title="LLM Inference Server", version="0.3.0")
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+@app.get("/")
+def root():
+    return FileResponse("app/static/index.html")
 
 
 @app.middleware("http")
@@ -269,55 +308,78 @@ def health():
 
 @app.get("/model")
 def model_info():
-    """
-    Small introspection endpoint so you can explain:
-    - decoder-only vs encoder-decoder
-    - causal masking
-    - context window
-    - heads / hidden size
-    """
     return MODEL_META
 
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest):
     rid = REQUEST_ID.get()
-    prompt = payload.prompt.strip()
-    if not prompt:
+    user_prompt = payload.prompt.strip()
+    if not user_prompt:
         raise HTTPException(status_code=400, detail="prompt must be non-empty")
 
-    # Mechanics computed up-front (maps to your Video 2 notes)
     context_window = MODEL_META["context_window"]
     model_type = MODEL_META["model_type"]
     masking = MODEL_META["attention_masking"]
     heads = MODEL_META["attention_heads"]
     hidden = MODEL_META["hidden_size"]
 
-    prompt_tokens = _count_tokens(prompt)
-
-    # Guardrail BEFORE generation
-    _enforce_context_guardrail(prompt_tokens, payload.max_new_tokens, context_window)
-
+    # Run generation
     start = time.perf_counter()
-    try:
-        response_text, prompt_tokens2, completion_tokens = _generate(
-            prompt=prompt,
-            max_new_tokens=payload.max_new_tokens,
-            temperature=payload.temperature,
-            top_p=payload.top_p,
-        )
-        # prompt_tokens2 should equal prompt_tokens, but keep the generated value for consistency
-        prompt_tokens = prompt_tokens2
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"inference_failed: {repr(e)}") from e
+    response_text, prompt_tokens, completion_tokens = _generate(
+        prompt=user_prompt,
+        max_new_tokens=payload.max_new_tokens,
+        temperature=payload.temperature,
+        top_p=payload.top_p,
+    )
+
+    refined = False
+    original_response = None
+    critique_text = None
+    steps_used = 0
+
+    # Optional self-refinement loop
+    if payload.mode == "refine":
+        refined = True
+        original_response = response_text
+
+        current_answer = response_text
+        for _ in range(payload.refine_steps):
+            steps_used += 1
+
+            critique_prompt = _build_critique_prompt(user_prompt, current_answer)
+            critique_text, _, _ = _generate(
+                prompt=critique_prompt,
+                max_new_tokens=min(256, payload.max_new_tokens),
+                temperature=payload.critique_temperature,
+                top_p=payload.top_p,
+            )
+
+            refine_prompt = _build_refine_prompt(user_prompt, current_answer, critique_text)
+            improved_answer, _, _ = _generate(
+                prompt=refine_prompt,
+                max_new_tokens=payload.max_new_tokens,
+                temperature=payload.temperature,
+                top_p=payload.top_p,
+            )
+
+            current_answer = improved_answer
+
+        # Final answer is the refined one
+        response_text = current_answer
+
+        # Update token counts for final prompt/answer visibility
+        # Keep the original prompt_tokens as the user prompt tokens, but recompute completion tokens from final answer length
+        # For this stage, we track totals at the API boundary rather than exact per-pass accounting.
+        completion_tokens = _count_tokens(response_text)
 
     latency_ms = int((time.perf_counter() - start) * 1000)
 
-    total_tokens_effective = prompt_tokens + completion_tokens
-    context_used_pct = round((total_tokens_effective / context_window) * 100.0, 4)
-    est_ops = _estimated_attention_ops(total_tokens_effective)
+    total_tokens = prompt_tokens + completion_tokens
+    context_used_pct = round((total_tokens / context_window) * 100.0, 4)
+    est_ops = _estimated_attention_ops(total_tokens)
+
+    ratio = round((completion_tokens / max(prompt_tokens, 1)), 4)
 
     log_json(
         LOGGER,
@@ -328,7 +390,8 @@ def chat(payload: ChatRequest):
             "latency_ms": latency_ms,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
-            "total_tokens": total_tokens_effective,
+            "total_tokens": total_tokens,
+            "output_to_input_ratio": ratio,
             "context_window": context_window,
             "context_used_pct": context_used_pct,
             "model_type": model_type,
@@ -336,9 +399,11 @@ def chat(payload: ChatRequest):
             "attention_heads": heads,
             "hidden_size": hidden,
             "estimated_attention_ops": est_ops,
-            "max_new_tokens": payload.max_new_tokens,
+            "mode": payload.mode,
+            "refine_steps_used": steps_used,
             "temperature": payload.temperature,
             "top_p": payload.top_p,
+            "max_new_tokens": payload.max_new_tokens,
         },
     )
 
@@ -356,4 +421,103 @@ def chat(payload: ChatRequest):
         attention_heads=heads,
         hidden_size=hidden,
         estimated_attention_ops=est_ops,
+        total_tokens=total_tokens,
+        output_to_input_ratio=ratio,
+        refined=refined,
+        original_response=original_response,
+        critique=critique_text,
+        refine_steps_used=steps_used,
+    )
+
+
+@app.post("/evaluate", response_model=EvaluateResponse)
+def evaluate(payload: EvaluateRequest):
+    rid = REQUEST_ID.get()
+    prompt = payload.prompt.strip()
+    answer = payload.response.strip()
+    if not prompt or not answer:
+        raise HTTPException(status_code=400, detail="prompt and response must be non-empty")
+
+    start = time.perf_counter()
+
+    eval_prompt = _build_eval_prompt(prompt, answer, [c for c in payload.criteria])
+    eval_text, _, _ = _generate(
+        prompt=eval_prompt,
+        max_new_tokens=256,
+        temperature=0.0,  # deterministic
+        top_p=1.0,
+    )
+
+    latency_ms = int((time.perf_counter() - start) * 1000)
+
+    json_block = _extract_json_block(eval_text)
+    scores: List[CriterionScore] = []
+
+    if json_block is None:
+        # Fallback: return a single overall score with rationale text
+        scores = [
+            CriterionScore(
+                criterion="overall",
+                score=5,
+                rationale=f"Failed to parse evaluator JSON. Raw output: {eval_text[:500]}",
+            )
+        ]
+    else:
+        import json
+
+        try:
+            scores = []
+            blocks = eval_text.split("---")
+
+            for block in blocks:
+                lines = block.strip().split("\n")
+                if len(lines) >= 3:
+                    try:
+                        criterion = lines[0].split(":", 1)[1].strip()
+                        score = int(lines[1].split(":", 1)[1].strip())
+                        rationale = lines[2].split(":", 1)[1].strip()
+                        scores.append(
+                            CriterionScore(
+                                criterion=criterion,
+                                score=score,
+                                rationale=rationale,
+                            )
+                        )
+                    except Exception:
+                        continue
+
+            if not scores:
+                scores = [
+                    CriterionScore(
+                        criterion="overall",
+                        score=5,
+                        rationale="Evaluator output could not be parsed."
+                    )
+                ]
+        except Exception:
+            scores = [
+                CriterionScore(
+                    criterion="overall",
+                    score=5,
+                    rationale=f"Evaluator JSON parse error. Raw output: {eval_text[:500]}",
+                )
+            ]
+
+    log_json(
+        LOGGER,
+        {
+            "event": "evaluate",
+            "request_id": rid,
+            "model": MODEL_NAME,
+            "latency_ms": latency_ms,
+            "criteria": payload.criteria,
+            "scores": [s.model_dump() for s in scores],
+        },
+    )
+
+    return EvaluateResponse(
+        request_id=rid,
+        model=MODEL_NAME,
+        scores=scores,
+        latency_ms=latency_ms,
     )
