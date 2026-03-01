@@ -1,4 +1,4 @@
-# Baseline LLM Inference Server (Stage 1)
+# Baseline LLM Inference Server (Stage 1 + v1 Contract Skeleton)
 
 A minimal transformer-backed inference service. This is the foundational “Stage 1” of a larger project that will evolve into evaluation, RAG, agents, and dashboards later.
 
@@ -8,6 +8,7 @@ A minimal transformer-backed inference service. This is the foundational “Stag
   - latency (ms)
   - prompt token count
   - completion token count
+- v1 contract skeleton endpoints (`/healthz`, `/readyz`, `/v1/*`) for upcoming staged implementation
 - Dockerized and reproducible
 
 ## What this is NOT (yet)
@@ -18,7 +19,23 @@ A minimal transformer-backed inference service. This is the foundational “Stag
 - No authentication / API keys
 - No agents
 
-Those come in later stages.
+Those come in later stages. The `/v1/*` endpoints are now present as contract-valid placeholders to support incremental implementation.
+
+## API key for v1 endpoints
+
+All `/v1/*` endpoints require `x-api-key`.
+
+- Default local key: `dev-local-key`
+- Override with env var: `API_KEY`
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/v1/chat \
+  -H "x-api-key: dev-local-key" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"hello"}'
+```
 
 ## Why does this exist?
 To expose the operational realities of running transformer models before adding higher-level reasoning or evaluation.
@@ -76,4 +93,3 @@ docker build -t llm-server .
 ```bash
 docker run -p 8000:8000 -e MODEL_NAME=distilgpt2 llm-server
 ```
-

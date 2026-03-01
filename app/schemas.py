@@ -59,3 +59,60 @@ class EvaluateResponse(BaseModel):
     model: str
     scores: List[CriterionScore]
     latency_ms: int
+
+
+class EmbeddingsRequest(BaseModel):
+    input: str | List[str]
+    model: Optional[str] = None
+    normalize: bool = True
+
+
+class EmbeddingItem(BaseModel):
+    object: Literal["embedding"] = "embedding"
+    index: int
+    embedding: List[float]
+
+
+class EmbeddingsResponse(BaseModel):
+    object: Literal["list"] = "list"
+    data: List[EmbeddingItem]
+    model: str
+    usage: Dict[str, int]
+    request_id: str
+
+
+class RagQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200_000)
+    dataset_id: str = Field(..., min_length=1, max_length=200)
+    top_k: int = Field(5, ge=1, le=20)
+    max_new_tokens: int = Field(220, ge=1, le=1024)
+    temperature: float = Field(0.1, ge=0.0, le=2.0)
+
+
+class RagQueryResponse(BaseModel):
+    response: str
+    retrieved_chunks: List[Dict[str, Any]]
+    request_id: str
+
+
+class DatasetCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    records: List[Dict[str, str]] = Field(default_factory=list)
+
+
+class DatasetCreateResponse(BaseModel):
+    dataset_id: str
+    name: str
+    records_count: int
+    request_id: str
+
+
+class BatchEvalCreateRequest(BaseModel):
+    dataset_id: str = Field(..., min_length=1, max_length=200)
+    criteria: List[EvalCriteria] = Field(default_factory=lambda: ["overall"])
+
+
+class BatchEvalCreateResponse(BaseModel):
+    run_id: str
+    status: Literal["queued"] = "queued"
+    request_id: str
