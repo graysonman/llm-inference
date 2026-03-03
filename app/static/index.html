@@ -1,62 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>LLM Experimentation Console</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Inference Console</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+<div class="bg-orb bg-orb-a"></div>
+<div class="bg-orb bg-orb-b"></div>
 
-<div class="container">
-
-    <h1>LLM Experimentation Console</h1>
-
-    <section>
-        <h2>Chat</h2>
-
-        <textarea id="prompt" placeholder="Enter prompt..."></textarea>
-
-        <div class="row">
-            <label>Mode:</label>
-            <select id="mode">
-                <option value="single">Single</option>
-                <option value="refine">Refine</option>
-            </select>
-
-            <label>Refine Steps:</label>
-            <input type="number" id="refine_steps" value="1" min="1" max="3">
+<main class="shell">
+    <header class="topbar">
+        <h1>LLM Inference Console</h1>
+        <div class="auth-box">
+            <label for="api_key">API Key</label>
+            <input id="api_key" type="password" value="dev-local-key" />
+            <button id="save_key_btn" type="button">Use Key</button>
+            <span id="auth_state">Ready</span>
         </div>
+    </header>
 
-        <div class="row">
-            <label>Max Tokens:</label>
-            <input type="number" id="max_tokens" value="160">
+    <nav class="tabs" id="tabs">
+        <button class="tab active" data-tab="playground">Playground</button>
+        <button class="tab" data-tab="rag">RAG Explorer</button>
+        <button class="tab" data-tab="datasets">Dataset Manager</button>
+        <button class="tab" data-tab="batch">Batch Evaluation</button>
+        <button class="tab" data-tab="metrics">Metrics Dashboard</button>
+        <button class="tab" data-tab="status">System Status</button>
+    </nav>
 
-            <label>Temperature:</label>
-            <input type="number" id="temperature" value="0.2" step="0.1">
+    <section class="panel active" id="playground">
+        <h2>Playground</h2>
+        <textarea id="chat_prompt" placeholder="Ask the model..."></textarea>
+        <div class="grid">
+            <label>Mode <select id="chat_mode"><option value="single">single</option><option value="refine">refine</option></select></label>
+            <label>Refine Steps <input id="chat_refine_steps" type="number" value="1" min="1" max="3"></label>
+            <label>Max Tokens <input id="chat_max_tokens" type="number" value="160" min="1" max="1024"></label>
+            <label>Temperature <input id="chat_temperature" type="number" step="0.1" value="0.2"></label>
         </div>
-
-        <button onclick="runChat()">Run Chat</button>
-
+        <button id="chat_btn" type="button">Run Chat</button>
         <pre id="chat_output"></pre>
     </section>
 
-    <section>
-        <h2>Evaluate</h2>
-
-        <textarea id="eval_prompt" placeholder="Original prompt..."></textarea>
-        <textarea id="eval_response" placeholder="Model response..."></textarea>
-
-        <button onclick="runEval()">Run Evaluation</button>
-
-        <pre id="eval_output"></pre>
+    <section class="panel" id="rag">
+        <h2>RAG Explorer</h2>
+        <div class="grid">
+            <label>Dataset ID <input id="rag_dataset" type="text" placeholder="ds_..."></label>
+            <label>Top K <input id="rag_top_k" type="number" value="5" min="1" max="50"></label>
+        </div>
+        <textarea id="rag_query" placeholder="Ask a retrieval-backed question..."></textarea>
+        <button id="rag_btn" type="button">Run RAG Query</button>
+        <pre id="rag_output"></pre>
     </section>
 
-    <section>
-        <h2>Model Info</h2>
-        <button onclick="loadModel()">Load Model Info</button>
-        <pre id="model_output"></pre>
+    <section class="panel" id="datasets">
+        <h2>Dataset Manager</h2>
+        <div class="grid">
+            <label>Name <input id="ds_name" type="text" value="sample-dataset"></label>
+            <label>Type
+                <select id="ds_type">
+                    <option value="eval_set">eval_set</option>
+                    <option value="rag_corpus">rag_corpus</option>
+                </select>
+            </label>
+            <label>Metadata JSON <input id="ds_metadata" type="text" value="{}"></label>
+            <label>Upload File <input id="ds_file" type="file" accept=".jsonl,.csv,.txt"></label>
+        </div>
+        <div class="actions">
+            <button id="ds_upload_btn" type="button">Upload Dataset File</button>
+            <button id="ds_list_btn" type="button">List Datasets</button>
+        </div>
+        <pre id="ds_output"></pre>
     </section>
 
-</div>
+    <section class="panel" id="batch">
+        <h2>Batch Evaluation</h2>
+        <div class="grid">
+            <label>Dataset ID <input id="batch_dataset_id" type="text" placeholder="ds_..."></label>
+            <label>Criteria (comma separated) <input id="batch_criteria" type="text" value="accuracy,overall"></label>
+            <label>Concurrency <input id="batch_concurrency" type="number" value="1" min="1" max="32"></label>
+        </div>
+        <div class="actions">
+            <button id="batch_start_btn" type="button">Start Batch Eval</button>
+            <button id="batch_status_btn" type="button">Get Status</button>
+            <button id="batch_result_btn" type="button">Get Result</button>
+        </div>
+        <input id="batch_run_id" type="text" placeholder="batch run id">
+        <pre id="batch_output"></pre>
+    </section>
+
+    <section class="panel" id="metrics">
+        <h2>Metrics Dashboard</h2>
+        <div class="actions">
+            <button id="metrics_dashboard_btn" type="button">Load Dashboard</button>
+            <button id="metrics_prom_btn" type="button">Load Prometheus Text</button>
+        </div>
+        <pre id="metrics_output"></pre>
+    </section>
+
+    <section class="panel" id="status">
+        <h2>System Status</h2>
+        <div class="actions">
+            <button id="status_btn" type="button">Load Status</button>
+        </div>
+        <pre id="status_output"></pre>
+    </section>
+</main>
 
 <script src="/static/app.js"></script>
 </body>

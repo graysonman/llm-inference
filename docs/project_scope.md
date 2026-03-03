@@ -40,16 +40,18 @@ Use this checklist to determine phase completion status.
 
 ### Must-have (completion gate)
 
-- [ ] Chat is implemented and usable end-to-end.
-- [ ] Evaluate functionality is implemented and runnable.
-- [ ] Embeddings pipeline is implemented and callable.
-- [ ] RAG workflow is implemented with retrieval + generation.
-- [ ] Dataset upload is implemented with basic validation.
-- [ ] Batch eval is implemented for multi-item evaluation runs.
-- [ ] Persistence is implemented for core project state/data.
-- [ ] Auth is implemented for protected access paths.
-- [ ] Redis cache is integrated and used in relevant hot paths.
-- [ ] Metrics dashboard is available with core operational metrics.
+_Status updated: 2026-03-02_
+
+- [x] Chat is implemented and usable end-to-end.
+- [x] Evaluate functionality is implemented and runnable.
+- [x] Embeddings pipeline is implemented and callable.
+- [x] RAG workflow is implemented with retrieval + generation.
+- [x] Dataset upload is implemented with basic validation.
+- [x] Batch eval is implemented for multi-item evaluation runs.
+- [x] Persistence is implemented for core project state/data. (JSON snapshot and optional SQLite backend)
+- [x] Auth is implemented for protected access paths.
+- [x] Redis cache is integrated and used in relevant hot paths. (with in-memory fallback)
+- [x] Metrics dashboard is available with core operational metrics.
 
 ### Stretch goals (nice-to-have)
 
@@ -60,6 +62,6 @@ Use this checklist to determine phase completion status.
 
 ### Out-of-scope guardrails (must remain deferred this phase)
 
-- [ ] Multimodal support is not committed as part of this phase plan.
-- [ ] Fine-tuning pipeline work is deferred to a future phase.
-- [ ] Distributed serving work is deferred to a future phase.
+- [x] Multimodal support is not committed as part of this phase plan.
+- [x] Fine-tuning pipeline work is deferred to a future phase.
+- [x] Distributed serving work is deferred to a future phase.

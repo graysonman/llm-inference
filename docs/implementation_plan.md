@@ -2,6 +2,27 @@
 
 This implementation plan breaks delivery into 1–2 week milestones that align backend contracts, persistence, evaluation, and UI rollout sequencing.
 
+
+## Implementation status (as of 2026-03-02)
+
+- Milestone 1: Complete.
+  - Contracts/endpoints are present, request validation and request ID propagation are implemented.
+  - OpenAPI artifact export script and contract coverage tests are now added.
+- Milestone 2: Partially complete.
+  - Chat inference path, auth middleware, rate limiting, and baseline metrics are implemented.
+  - Remaining: Redis-backed cache (current cache is in-memory) and role-based authz guards.
+- Milestone 3: Partially complete.
+  - Dataset upload + validation flow, single-sample evaluation persistence, and eval retrieval endpoints are implemented.
+  - Remaining: durable persistence backend (current storage is in-memory).
+- Milestone 4: Partially complete.
+  - Embeddings endpoint, RAG endpoints, and index status endpoint are implemented.
+  - Remaining: true retrieval/index pipeline with richer grounding diagnostics.
+- Milestone 5: Partially complete.
+  - Batch eval endpoints, summary/distribution/failure views, and metrics dashboard endpoint/UI are implemented.
+  - Remaining: async queue/orchestrator/retry semantics and artifact export pipeline.
+- Milestone 6: In progress.
+  - Rate-limit behavior and degraded readiness signaling are present.
+  - Remaining: full NFR hardening, load/SLO validation, circuit breakers, and release runbook completion.
 ## Delivery milestones (1–2 week increments)
 
 ### Milestone 1 (Week 1): Foundations and contracts

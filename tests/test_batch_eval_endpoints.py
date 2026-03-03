@@ -1,9 +1,12 @@
+import time
+
 from app.main import (
     REQUEST_ID,
     DATASETS,
     BATCH_EVAL_RUNS,
     v1_create_dataset,
     v1_create_batch_eval,
+    v1_get_batch_eval,
     v1_get_batch_eval_result,
     v1_get_batch_eval_failures,
     v1_get_batch_eval_distribution,
@@ -34,8 +37,15 @@ def test_batch_eval_result_and_distribution_and_failures():
         BatchEvalCreateRequest(dataset_id=created.dataset_id, criteria=["accuracy", "overall"])
     )
 
+    deadline = time.time() + 2.0
+    status = v1_get_batch_eval(run.run_id).status
+    while status != "completed" and time.time() < deadline:
+        time.sleep(0.02)
+        status = v1_get_batch_eval(run.run_id).status
+
     result = v1_get_batch_eval_result(run.run_id)
     assert result.batch_eval_id == run.run_id
+    assert result.status == "completed"
     assert result.summary["total_items"] == 3
     assert "overall" in result.summary["mean_scores"]
 

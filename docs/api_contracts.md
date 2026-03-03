@@ -20,6 +20,7 @@ This document defines request/response schemas, error envelopes, and compatibili
 
 ### Required header
 - `x-api-key: <key>` is required for all non-health endpoints.
+- Keys are authorized by role/scope policy; insufficient scope returns `403 forbidden`.
 
 ### Standard request headers
 - `Content-Type: application/json` for JSON bodies.
@@ -256,8 +257,21 @@ Run retrieval-augmented generation using a retrieval corpus.
 
 ## 5) Dataset endpoints
 
-## `POST /v1/datasets` (upload)
-Upload a dataset for retrieval/evaluation.
+## `POST /v1/datasets`
+Create a dataset from JSON payload records.
+
+### Request (application/json)
+```json
+{
+  "name": "prod-kb-january",
+  "type": "rag_corpus",
+  "records": [{"text": "Key rotation should be phased..."}],
+  "metadata": {"source": "handbook"}
+}
+```
+
+## `POST /v1/datasets/upload`
+Upload a dataset file for retrieval/evaluation.
 
 ### Request (multipart/form-data)
 Fields:
@@ -274,7 +288,7 @@ Fields:
   "name": "prod-kb-january",
   "type": "rag_corpus",
   "status": "processing",
-  "created_at": "2026-01-10T15:00:00Z",
+  "created_at": 1768057200,
   "request_id": "8ce7e5f9-7a47-49fd-bb9f-7d0ddc49e1e0"
 }
 ```
@@ -298,7 +312,7 @@ Fields:
       "type": "rag_corpus",
       "status": "ready",
       "record_count": 1032,
-      "created_at": "2026-01-10T15:00:00Z"
+      "created_at": 1768057200
     }
   ],
   "next_cursor": null,
@@ -318,8 +332,8 @@ Fields:
   "status": "ready",
   "record_count": 1032,
   "error": null,
-  "created_at": "2026-01-10T15:00:00Z",
-  "updated_at": "2026-01-10T15:02:07Z",
+  "created_at": 1768057200,
+  "updated_at": 1768057327,
   "request_id": "8ce7e5f9-7a47-49fd-bb9f-7d0ddc49e1e0"
 }
 ```
@@ -348,7 +362,7 @@ Create an asynchronous batch evaluation run.
 {
   "batch_eval_id": "be_01J9Q6CBJ2A9EDMFGY89AZZ4W5",
   "status": "queued",
-  "created_at": "2026-01-10T15:04:00Z",
+  "created_at": 1768057440,
   "request_id": "8ce7e5f9-7a47-49fd-bb9f-7d0ddc49e1e0"
 }
 ```
@@ -388,8 +402,7 @@ Create an asynchronous batch evaluation run.
     "total_items": 500,
     "failed_items": 4
   },
-  "results_url": "https://example-bucket/results/be_01J9Q6CBJ2A9EDMFGY89AZZ4W5.jsonl",
-  "completed_at": "2026-01-10T15:09:42Z",
+  "completed_at": 1768057782,
   "request_id": "8ce7e5f9-7a47-49fd-bb9f-7d0ddc49e1e0"
 }
 ```
@@ -399,7 +412,7 @@ Create an asynchronous batch evaluation run.
 ## 7) Observability endpoints
 
 ## `GET /v1/metrics`
-Prometheus/OpenMetrics-compatible plaintext response.
+JSON response by default. Use `?format=prometheus` for Prometheus/OpenMetrics-compatible plaintext response.
 
 ### Success response (200, text/plain)
 Example metric names:

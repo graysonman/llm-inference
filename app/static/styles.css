@@ -1,51 +1,185 @@
+:root {
+    --bg: #081523;
+    --panel: rgba(10, 26, 42, 0.8);
+    --panel-border: rgba(128, 173, 211, 0.3);
+    --text: #e3eef8;
+    --muted: #97b1c7;
+    --accent: #1fb8ff;
+    --accent-2: #67f0c2;
+    --danger: #ff8f7a;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    background: #0f172a;
-    color: #e2e8f0;
-    font-family: monospace;
     margin: 0;
-    padding: 0;
+    min-height: 100vh;
+    color: var(--text);
+    background: radial-gradient(circle at 20% 20%, #133251 0, #081523 45%), linear-gradient(140deg, #07111d, #0b2034 60%, #0c1a2a);
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
 }
 
-.container {
-    padding: 20px;
-    max-width: 1000px;
-    margin: auto;
+.bg-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.35;
+    pointer-events: none;
 }
 
-textarea {
-    width: 100%;
-    height: 100px;
-    margin-bottom: 10px;
-    background: #1e293b;
-    color: #e2e8f0;
-    border: 1px solid #334155;
-    padding: 8px;
+.bg-orb-a {
+    width: 260px;
+    height: 260px;
+    top: -60px;
+    right: 10%;
+    background: #1fb8ff;
 }
 
-input, select {
-    background: #1e293b;
-    color: #e2e8f0;
-    border: 1px solid #334155;
-    padding: 5px;
-    margin-right: 10px;
+.bg-orb-b {
+    width: 300px;
+    height: 300px;
+    bottom: -110px;
+    left: 8%;
+    background: #67f0c2;
 }
 
-button {
-    background: #3b82f6;
-    color: white;
-    border: none;
+.shell {
+    position: relative;
+    z-index: 1;
+    width: min(1200px, 94vw);
+    margin: 24px auto;
+    padding: 18px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    backdrop-filter: blur(8px);
+    border-radius: 18px;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+h1, h2 {
+    margin: 8px 0;
+    letter-spacing: 0.02em;
+}
+
+.auth-box {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin: 18px 0 12px;
+    flex-wrap: wrap;
+}
+
+.tab {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
     padding: 8px 12px;
-    margin-top: 5px;
     cursor: pointer;
 }
 
-button:hover {
-    background: #2563eb;
+.tab.active {
+    color: #042035;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-color: transparent;
+}
+
+.panel {
+    display: none;
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 14px;
+    animation: fadein 220ms ease;
+}
+
+.panel.active {
+    display: block;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+input, select, textarea, button {
+    font: inherit;
+}
+
+input, select, textarea {
+    width: 100%;
+    border: 1px solid var(--panel-border);
+    border-radius: 9px;
+    padding: 9px;
+    color: var(--text);
+    background: rgba(6, 18, 31, 0.75);
+}
+
+textarea {
+    min-height: 112px;
+}
+
+button {
+    border: 0;
+    border-radius: 9px;
+    padding: 9px 12px;
+    cursor: pointer;
+    background: linear-gradient(90deg, #24c2ff, #4ce6b8);
+    color: #042035;
+    font-weight: 600;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
 }
 
 pre {
-    background: #1e293b;
+    margin: 8px 0 0;
+    min-height: 100px;
+    max-height: 340px;
+    overflow: auto;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    background: rgba(4, 16, 28, 0.9);
     padding: 10px;
-    overflow-x: auto;
-    margin-top: 10px;
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 0.84rem;
+}
+
+#auth_state.warn {
+    color: var(--danger);
+}
+
+@keyframes fadein {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
