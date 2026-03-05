@@ -1,76 +1,188 @@
-# Baseline LLM Inference Server
+# LLM Inference Console
 
-FastAPI service for local LLM inference with a staged `v1` API surface for chat, evaluation, embeddings, RAG, datasets, batch evals, and observability.
+FastAPI-based LLM operations platform with:
+- Chat and evaluation APIs
+- RAG + dataset management
+- Batch evaluation orchestration
+- Authz (role + scope) with capability-aware UI
+- Admin operations (runtime config, maintenance, breaker, SLO, runbooks, audit/state)
+- Optional vector backend swap (`in_memory`/`faiss`)
+- Optional tracing backend integration (OTLP)
+- Two web surfaces:
+  - Main console: `http://localhost:8000`
+  - Targeted React surface: `http://localhost:8000/react`
 
-## Implemented API surface
+## What This Project Solves
 
-- `GET /health`, `GET /healthz`, `GET /readyz`, `GET /v1/health`
-- `POST /chat`, `POST /v1/chat`
-- `POST /evaluate`, `POST /v1/evaluate`
-- `POST /v1/embeddings`
-- `POST /v1/rag`, `POST /v1/rag/query`
-- `POST /v1/datasets`, `POST /v1/datasets/upload`
-- `GET /v1/datasets`, `GET /v1/datasets/{dataset_id}`
-- `POST /v1/batch-evals`
-- `GET /v1/batch-evals/{run_id}`
-- `GET /v1/batch-evals/{run_id}/result`
-- `GET /v1/batch-evals/{run_id}/distribution`
-- `GET /v1/batch-evals/{run_id}/failures`
-- `GET /v1/evals/{run_id}`
-- `GET /v1/rag/indexes/{index_id}`
-- `GET /v1/metrics`, `GET /metrics/dashboard`
+This project gives you one local service/UI to:
+- Test prompts and RAG behavior quickly
+- Upload datasets and run repeatable evaluations
+- Track quality and operational health in one place
+- Operate the service safely via admin controls
+- Verify auth scopes/capabilities per API key
 
-All protected endpoints require `x-api-key` (default local key: `dev-local-key`).
+## Core Features
 
-Role/scope auth can be configured with:
-- `API_KEY_ROLE` for the default `API_KEY` role (default: `admin`)
-- `API_KEYS_JSON` for per-key role/scope overrides (JSON object)
+- Inference: `chat`, `evaluate`, `embeddings`, `rag`
+- Data plane: dataset upload/list/get/delete/restore/purge
+- Eval plane: batch queue, status, retries, events stream, artifact export
+- Ops plane: metrics, readiness/health, maintenance mode, circuit breaker, runtime tuning profiles, SLO incidents, runbooks/templates
+- Security: API key auth + role/scope enforcement + capability discovery endpoints
+- Stretch features: vector backend status, tracing status/probe, agent tools endpoints, targeted React migration surface
 
-Persistence backend can be configured with:
-- `STATE_BACKEND=json|sqlite` (default: `json`)
-- `STATE_FILE_PATH` for JSON snapshot backend
-- `STATE_SQLITE_PATH` for SQLite backend
+## Prerequisites
 
-## Quickstart
+- Python 3.11 (for local run)
+- Docker Desktop (for container run)
 
-```bash
+## Quick Start (Docker, recommended)
+
+1. From repo root, create `.env`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Build and run:
+
+```powershell
+docker compose up -d --build
+```
+
+3. Open:
+- Main UI: `http://localhost:8000`
+- React UI: `http://localhost:8000/react`
+
+4. In UI auth box:
+- API key: `dev-local-key`
+- Click `Use Key`
+
+5. Stop:
+
+```powershell
+docker compose down
+```
+
+## Quick Start (Local Python)
+
+```powershell
 python -m venv .venv
-source .venv/bin/activate
+.\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Windows PowerShell activation:
+## Minimal `.env` Configuration
 
-```powershell
-.\.venv\Scripts\activate
+```env
+API_KEY=dev-local-key
+API_KEY_ROLE=admin
+API_KEYS_JSON={"dev-local-key":{"role":"admin","scopes":["*"]}}
+MODEL_NAME=distilgpt2
+
+STATE_PERSISTENCE_ENABLED=1
+STATE_BACKEND=json
 ```
 
-## Example request
+Common optional config:
+- `STATE_BACKEND=sqlite`
+- `VECTOR_INDEX_BACKEND=in_memory|faiss`
+- `TRACING_ENABLED=1`
+- `TRACING_OTLP_ENDPOINT=http://<collector>:4318/v1/traces`
+
+![Main UI](/readme-img/image.png)
+
+## How To Use The UI
+
+1. `Playground`: run chat inference and inspect latency/tokens.
+2. `RAG Explorer`: query a chosen `dataset_id` with retrieval context.
+3. `Dataset Manager`: upload `.jsonl/.csv/.txt`, list datasets.
+4. `Batch Evaluation`: run async dataset evals and inspect result.
+5. `Metrics Dashboard`: summary + Prometheus text.
+6. `Agent Tools`: discover allowed tools and run tool-based plans.
+7. `System Status`: health/readiness/model/auth/access matrix/rag backend/tracing.
+8. `Admin Ops` (admin role): runtime config/profiles, maintenance, breaker, SLO incidents, runbooks, audit/state operations.
+
+## API Examples
+
+Set variables:
 
 ```bash
-curl -X POST http://localhost:8000/v1/chat \
-  -H "x-api-key: dev-local-key" \
+export BASE_URL="http://localhost:8000"
+export API_KEY="dev-local-key"
+```
+
+Chat:
+
+```bash
+curl -s -X POST "$BASE_URL/v1/chat" \
+  -H "x-api-key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Explain transformers in 3 sentences.","max_new_tokens":120}'
 ```
 
-## OpenAPI artifact export
-
-Export the current OpenAPI schema for client generation/contract checks:
+Upload dataset:
 
 ```bash
+curl -s -X POST "$BASE_URL/v1/datasets/upload" \
+  -H "x-api-key: $API_KEY" \
+  -F "name=quick-rag" \
+  -F "type=rag_corpus" \
+  -F "file=@./quick_rag.jsonl"
+```
+
+RAG query:
+
+```bash
+curl -s -X POST "$BASE_URL/v1/rag/query" \
+  -H "x-api-key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"dataset_id":"ds_xxxxxxxx","query":"How should API keys be rotated?","top_k":5}'
+```
+
+Agent tools:
+
+```bash
+curl -s "$BASE_URL/v1/agent/tools" -H "x-api-key: $API_KEY"
+
+curl -s -X POST "$BASE_URL/v1/agent/run" \
+  -H "x-api-key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Investigate datasets and metrics","requested_tools":["datasets.list","metrics.dashboard"]}'
+```
+
+Vector/tracing status:
+
+```bash
+curl -s "$BASE_URL/v1/rag/vector-backend" -H "x-api-key: $API_KEY"
+curl -s "$BASE_URL/v1/tracing/status" -H "x-api-key: $API_KEY"
+```
+
+## Troubleshooting
+
+- Tabs/buttons disabled except Status:
+  - Check `GET /v1/auth/context` with your key.
+  - Ensure `.env` has `API_KEYS_JSON` or role/scopes that allow required capabilities.
+  - Rebuild container after env changes: `docker compose up -d --build`.
+  - Hard refresh browser (`Ctrl+F5`) after frontend changes.
+
+- `docker compose down` says no configuration file:
+  - Run command from repo root where `docker-compose.yml` exists.
+
+- Startup takes time:
+  - First run downloads model weights; wait for `Application startup complete`.
+
+## Dev Utilities
+
+Run tests:
+
+```powershell
+$env:PYTHONPATH='.'
+pytest -q
+```
+
+Export OpenAPI:
+
+```powershell
 python scripts/export_openapi.py --output docs/openapi.v1.json
 ```
-
-## Contract verification tests
-
-```bash
-python -m pytest -q
-```
-
-## Current known gaps vs MVP docs
-
-- Persistence is file-backed JSON state (not yet a production database).
-- Redis cache is integrated for chat hot path when `REDIS_URL` is set; service falls back to in-memory cache when Redis is unavailable.
-- Batch evaluation now runs asynchronously in-process; external queue/retry orchestration is still pending.

@@ -18,6 +18,7 @@
             <input id="api_key" type="password" value="dev-local-key" />
             <button id="save_key_btn" type="button">Use Key</button>
             <span id="auth_state">Ready</span>
+            <span id="auth_role">Role: unknown</span>
         </div>
     </header>
 
@@ -27,7 +28,9 @@
         <button class="tab" data-tab="datasets">Dataset Manager</button>
         <button class="tab" data-tab="batch">Batch Evaluation</button>
         <button class="tab" data-tab="metrics">Metrics Dashboard</button>
+        <button class="tab" data-tab="agent">Agent Tools</button>
         <button class="tab" data-tab="status">System Status</button>
+        <button class="tab" data-tab="admin">Admin Ops</button>
     </nav>
 
     <section class="panel active" id="playground">
@@ -99,12 +102,231 @@
         <pre id="metrics_output"></pre>
     </section>
 
+    <section class="panel" id="agent">
+        <h2>Agent Tools</h2>
+        <div class="grid">
+            <label>Goal <textarea id="agent_goal" placeholder="Investigate dataset and service status."></textarea></label>
+            <label>Requested Tools (comma separated) <input id="agent_requested_tools" type="text" placeholder="datasets.list,metrics.dashboard"></label>
+        </div>
+        <div class="actions">
+            <button id="agent_tools_btn" type="button">List Agent Tools</button>
+            <button id="agent_run_btn" type="button">Run Agent Plan</button>
+        </div>
+        <pre id="agent_output"></pre>
+    </section>
+
     <section class="panel" id="status">
         <h2>System Status</h2>
         <div class="actions">
             <button id="status_btn" type="button">Load Status</button>
+            <button id="auth_ctx_btn" type="button">Load Auth Context</button>
+            <button id="auth_caps_btn" type="button">Load Access Matrix</button>
+            <button id="rag_backend_btn" type="button">Load RAG Backend</button>
+            <button id="tracing_status_btn" type="button">Load Tracing Status</button>
         </div>
         <pre id="status_output"></pre>
+        <pre id="auth_ctx_output"></pre>
+        <div id="auth_caps_matrix" class="auth-matrix"></div>
+    </section>
+
+    <section class="panel" id="admin">
+        <h2>Admin Operations</h2>
+        <p id="admin_access_notice" class="admin-notice"></p>
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h3>Runtime Config</h3>
+                <div class="grid">
+                    <label>Patch JSON <textarea id="admin_runtime_patch" placeholder='{"chat_request_timeout_ms":12000}'></textarea></label>
+                    <label>Dry Run
+                        <select id="admin_runtime_dry_run">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="admin_runtime_get_btn" type="button">Get Runtime Config</button>
+                    <button id="admin_runtime_update_btn" type="button">Update Runtime Config</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Runtime Profiles</h3>
+                <div class="grid">
+                    <label>Profile Name <input id="admin_profile_name" type="text" value="safe-defaults"></label>
+                    <label>Profile Patch JSON <textarea id="admin_profile_patch" placeholder='{"chat_request_timeout_ms":15000}'></textarea></label>
+                    <label>Overwrite
+                        <select id="admin_profile_overwrite">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                    <label>Apply Dry Run
+                        <select id="admin_profile_apply_dry_run">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="admin_profile_list_btn" type="button">List Profiles</button>
+                    <button id="admin_profile_get_btn" type="button">Get Profile</button>
+                    <button id="admin_profile_upsert_btn" type="button">Upsert Profile</button>
+                    <button id="admin_profile_apply_btn" type="button">Apply Profile</button>
+                    <button id="admin_profile_delete_btn" type="button">Delete Profile</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Maintenance</h3>
+                <div class="grid">
+                    <label>Reason <input id="admin_maint_reason" type="text" value="ops-window"></label>
+                    <label>Duration Seconds <input id="admin_maint_duration" type="number" min="1" value="300"></label>
+                    <label>Read Only
+                        <select id="admin_maint_read_only">
+                            <option value="false">false</option>
+                            <option value="true">true</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="admin_maint_status_btn" type="button">Get Maintenance</button>
+                    <button id="admin_maint_enable_btn" type="button">Enable Maintenance</button>
+                    <button id="admin_maint_disable_btn" type="button">Disable Maintenance</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Circuit Breaker</h3>
+                <div class="grid">
+                    <label>Reason <input id="admin_cb_reason" type="text" value="manual-check"></label>
+                    <label>Duration Seconds <input id="admin_cb_duration" type="number" min="1" value="60"></label>
+                </div>
+                <div class="actions">
+                    <button id="admin_cb_status_btn" type="button">Get Breaker</button>
+                    <button id="admin_cb_open_btn" type="button">Force Open</button>
+                    <button id="admin_cb_reset_btn" type="button">Reset Breaker</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>SLO & Incidents</h3>
+                <div class="grid">
+                    <label>SLO Window Seconds <input id="admin_slo_window" type="number" min="60" value="900"></label>
+                    <label>Incident Status
+                        <select id="admin_slo_incident_status">
+                            <option value="">any</option>
+                            <option value="open">open</option>
+                            <option value="acknowledged">acknowledged</option>
+                            <option value="resolved">resolved</option>
+                        </select>
+                    </label>
+                    <label>Incident Limit <input id="admin_slo_incident_limit" type="number" min="1" value="50"></label>
+                    <label>Incident ID <input id="admin_slo_incident_id" type="text" placeholder="sloi_..."></label>
+                    <label>Ack Note <input id="admin_slo_ack_note" type="text" value="triage started"></label>
+                    <label>Incident Note <input id="admin_slo_note" type="text" value="captured dashboard screenshot"></label>
+                </div>
+                <div class="actions">
+                    <button id="admin_slo_status_btn" type="button">Get SLO Status</button>
+                    <button id="admin_slo_incidents_btn" type="button">List Incidents</button>
+                    <button id="admin_slo_current_btn" type="button">Current Incident</button>
+                    <button id="admin_slo_get_btn" type="button">Get Incident</button>
+                    <button id="admin_slo_ack_btn" type="button">Acknowledge Incident</button>
+                    <button id="admin_slo_note_btn" type="button">Add Incident Note</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Runbook Templates</h3>
+                <div class="grid">
+                    <label>Template ID <input id="admin_tpl_id" type="text" value="release.v1"></label>
+                    <label>Template Limit <input id="admin_tpl_limit" type="number" min="1" value="50"></label>
+                    <label>Template Name <input id="admin_tpl_name" type="text" value="Release v1"></label>
+                    <label>Environment <input id="admin_tpl_env" type="text" value="staging"></label>
+                    <label>Steps (comma separated) <input id="admin_tpl_steps" type="text" value="Freeze,Deploy,Verify"></label>
+                    <label>Overwrite
+                        <select id="admin_tpl_overwrite">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="admin_tpl_list_btn" type="button">List Templates</button>
+                    <button id="admin_tpl_get_btn" type="button">Get Template</button>
+                    <button id="admin_tpl_upsert_btn" type="button">Upsert Template</button>
+                    <button id="admin_tpl_delete_btn" type="button">Delete Template</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Runbooks</h3>
+                <div class="grid">
+                    <label>Runbook ID <input id="admin_runbook_id" type="text" placeholder="rb_..."></label>
+                    <label>Runbook Status
+                        <select id="admin_runbook_status_filter">
+                            <option value="">any</option>
+                            <option value="active">active</option>
+                            <option value="completed">completed</option>
+                            <option value="aborted">aborted</option>
+                        </select>
+                    </label>
+                    <label>Runbook Limit <input id="admin_runbook_limit" type="number" min="1" value="50"></label>
+                    <label>Runbook Name <input id="admin_runbook_name" type="text" value="pre-release checklist"></label>
+                    <label>Environment <input id="admin_runbook_env" type="text" value="staging"></label>
+                    <label>Steps (comma separated) <input id="admin_runbook_steps" type="text" value="Smoke tests,Readiness checks,Rollback verification"></label>
+                    <label>Step ID <input id="admin_runbook_step_id" type="text" value="step_1"></label>
+                    <label>Step Status
+                        <select id="admin_runbook_step_status">
+                            <option value="pending">pending</option>
+                            <option value="completed">completed</option>
+                            <option value="blocked">blocked</option>
+                        </select>
+                    </label>
+                    <label>Step Note <input id="admin_runbook_step_note" type="text" value="validated"></label>
+                    <label>Abort Reason <input id="admin_runbook_abort_reason" type="text" value="operator stop"></label>
+                </div>
+                <div class="actions">
+                    <button id="admin_runbook_list_btn" type="button">List Runbooks</button>
+                    <button id="admin_runbook_create_btn" type="button">Create Runbook</button>
+                    <button id="admin_runbook_from_tpl_btn" type="button">Create From Template</button>
+                    <button id="admin_runbook_get_btn" type="button">Get Runbook</button>
+                    <button id="admin_runbook_step_btn" type="button">Update Step</button>
+                    <button id="admin_runbook_complete_btn" type="button">Complete Runbook</button>
+                    <button id="admin_runbook_abort_btn" type="button">Abort Runbook</button>
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Audit & State</h3>
+                <div class="grid">
+                    <label>Audit Action Filter <input id="admin_audit_action" type="text" placeholder="runbook.create"></label>
+                    <label>Audit Resource Type <input id="admin_audit_resource_type" type="text" placeholder="runbook"></label>
+                    <label>Audit Since (unix ts) <input id="admin_audit_since_ts" type="number" min="0" placeholder="1710000000"></label>
+                    <label>Audit Limit <input id="admin_audit_limit" type="number" min="1" value="100"></label>
+                    <label>State Import JSON <textarea id="admin_state_import_json" placeholder='{"data":{...}}'></textarea></label>
+                    <label>Import Mode
+                        <select id="admin_state_import_mode">
+                            <option value="replace">replace</option>
+                            <option value="merge">merge</option>
+                        </select>
+                    </label>
+                    <label>Import Dry Run
+                        <select id="admin_state_import_dry_run">
+                            <option value="true">true</option>
+                            <option value="false">false</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="admin_audit_btn" type="button">Get Audit Logs</button>
+                    <button id="admin_state_export_btn" type="button">Export State</button>
+                    <button id="admin_state_export_to_import_btn" type="button">Export -> Import Buffer</button>
+                    <button id="admin_state_import_btn" type="button">Import State</button>
+                </div>
+            </div>
+        </div>
+        <pre id="admin_output"></pre>
     </section>
 </main>
 

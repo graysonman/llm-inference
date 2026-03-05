@@ -39,3 +39,23 @@ def test_require_auth_for_scopes_rejects_missing_scope():
         assert "datasets:write" in detail["details"]["missing_scopes"]
     finally:
         main.API_KEY_REGISTRY = previous_registry
+
+
+def test_build_auth_capabilities_for_admin_and_viewer():
+    admin_caps = main._build_auth_capabilities({"role": "admin", "scopes": ["*"]})
+    assert admin_caps["admin.access"] is True
+    assert admin_caps["chat.invoke"] is True
+    assert admin_caps["agent.invoke"] is True
+    assert admin_caps["datasets.write"] is True
+
+    viewer_caps = main._build_auth_capabilities({"role": "viewer", "scopes": ["datasets:read"]})
+    assert viewer_caps["admin.access"] is False
+    assert viewer_caps["datasets.read"] is True
+    assert viewer_caps["datasets.write"] is False
+    assert viewer_caps["agent.invoke"] is False
+    assert viewer_caps["chat.invoke"] is False
+
+
+def test_auth_capability_catalog_keys_match_computed_capabilities():
+    caps = main._build_auth_capabilities({"role": "admin", "scopes": ["*"]})
+    assert set(main.AUTH_CAPABILITY_CATALOG.keys()) == set(caps.keys())

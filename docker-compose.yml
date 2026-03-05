@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: llm-inference-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped

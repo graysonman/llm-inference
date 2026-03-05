@@ -12,6 +12,15 @@ def setup_function():
     main.EVAL_RUNS.clear()
     main.BATCH_EVAL_RUNS.clear()
     main.RAG_INDEXES.clear()
+    main.RUNTIME_CONFIG_PROFILES.clear()
+    main.RUNBOOK_RUNS.clear()
+    main.RUNBOOK_TEMPLATES.clear()
+    main._maintenance_disable()
+    with main.SLO_LOCK:
+        main.SLO_EVENTS.clear()
+        main.SLO_INCIDENTS.clear()
+        main.SLO_STATE["breached"] = False
+        main.SLO_STATE["current_incident_id"] = None
 
 
 def test_state_save_and_load_round_trip():

@@ -101,6 +101,11 @@ h1, h2 {
     border-color: transparent;
 }
 
+.tab[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .panel {
     display: none;
     border: 1px solid var(--panel-border);
@@ -160,6 +165,90 @@ button {
     gap: 8px;
     flex-wrap: wrap;
     margin-bottom: 8px;
+}
+
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.admin-card {
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    background: rgba(7, 20, 34, 0.75);
+    padding: 10px;
+}
+
+.admin-card h3 {
+    margin-top: 2px;
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+.admin-notice {
+    margin: 0 0 10px;
+    color: var(--danger);
+    font-size: 0.9rem;
+    display: none;
+}
+
+.admin-notice.visible {
+    display: block;
+}
+
+.auth-matrix {
+    margin-top: 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    background: rgba(4, 16, 28, 0.75);
+    padding: 10px;
+}
+
+.auth-matrix:empty {
+    display: none;
+}
+
+.auth-matrix-row {
+    display: grid;
+    grid-template-columns: auto minmax(160px, 1fr) 2fr;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(128, 173, 211, 0.15);
+}
+
+.auth-matrix-row:last-child {
+    border-bottom: 0;
+}
+
+.auth-chip {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.auth-chip.allowed {
+    background: rgba(103, 240, 194, 0.2);
+    color: var(--accent-2);
+}
+
+.auth-chip.denied {
+    background: rgba(255, 143, 122, 0.18);
+    color: var(--danger);
+}
+
+.auth-matrix-cap {
+    font-family: "IBM Plex Mono", Consolas, monospace;
+    font-size: 0.82rem;
+}
+
+.auth-matrix-desc {
+    color: var(--muted);
+    font-size: 0.85rem;
 }
 
 pre {
