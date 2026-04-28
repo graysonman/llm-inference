@@ -1,4 +1,12 @@
-# LLM Inference Console
+# LLM Inference
+
+A local LLM operations platform built to explore production patterns for AI services — RAG pipelines, batch evaluation, observability via OTLP tracing, circuit breaker, and role-scoped API key auth. Built with FastAPI and SQLAlchemy. Deployable locally via Docker in under five minutes.
+
+## What I was learning
+
+The goal was to build something that reflected real production concerns not just a wrapper around an API. That meant adding a circuit breaker to handle model backend failures gracefully, OTLP tracing for observability, and a proper auth layer with role/scope enforcement rather than a single hardcoded key.
+
+## LLM Inference Console
 
 FastAPI-based LLM operations platform with:
 - Chat and evaluation APIs
